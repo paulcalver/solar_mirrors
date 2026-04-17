@@ -22,6 +22,7 @@ PROTOCOL     = 2.0
 ADDR_TORQUE  = 64
 ADDR_GOAL    = 116
 ADDR_POS     = 132
+ADDR_PROFILE_VEL     = 112
 
 PAN_ID       = 1
 TILT_ID      = 2
@@ -31,6 +32,10 @@ PAN_CENTRE   = 1140
 TILT_CENTRE  = 850
 PAN_RANGE    = 200
 TILT_RANGE   = 100
+
+# ── Motion profile ──────────────────────────────────────────
+SEEK_VELOCITY    = 15    # slow, smooth steps in seek mode (0 = instant)
+EXPLORE_VELOCITY = 0     # let explore mode's sine-wave commands drive motion
 
 # ── Light level configuration ──────────────────────────────
 SEEK_THRESHOLD    = 0.3
@@ -74,6 +79,10 @@ portHandler.setBaudRate(BAUDRATE)
 print("Connected to servos\n")
 
 # ── Helper functions ───────────────────────────────────────
+def set_velocity(sid, velocity):
+    """Set profile velocity. Lower = slower/smoother, 0 = max speed."""
+    packetHandler.write4ByteTxRx(portHandler, sid, ADDR_PROFILE_VEL, velocity)
+
 def enable_torque(sid):
     packetHandler.write1ByteTxRx(portHandler, sid, ADDR_TORQUE, 1)
 
@@ -150,6 +159,8 @@ def check_keypress():
 # ── Enable torque ──────────────────────────────────────────
 enable_torque(PAN_ID)
 enable_torque(TILT_ID)
+set_velocity(PAN_ID,  SEEK_VELOCITY)  
+set_velocity(TILT_ID, SEEK_VELOCITY)
 move_to(PAN_ID,  PAN_CENTRE)
 move_to(TILT_ID, TILT_CENTRE)
 time.sleep(1)
@@ -199,25 +210,33 @@ try:
 
             if light_level >= SEEK_THRESHOLD:
                 print(f"\n** LOCKED at light={light_level:.2f} **")
+                set_velocity(PAN_ID,  EXPLORE_VELOCITY)  
+                set_velocity(TILT_ID, EXPLORE_VELOCITY)
                 mode = 'explore'
                 t    = 0
 
-        # ── Explore mode ───────────────────────────────────
+# ── Explore mode ───────────────────────────────────
         elif mode == 'explore':
-            # Amplitude scales gently with light (0.6 to 1.0 of full range)
-            # so the mirror always explores meaningfully once locked
+            # Circular/oval motion with constant angular velocity
+            # — no slowdowns at the extremes like a sine wave has.
+            # Amplitude scales gently with light (0.6 to 1.0 of full range).
             amp_scale = 0.6 + 0.4 * light_level
-            amplitude = PAN_RANGE  * amp_scale
+            pan_amp   = PAN_RANGE  * amp_scale
             tilt_amp  = TILT_RANGE * amp_scale
 
-            # Slow, meditative frequency — one pan cycle every 40–80 seconds
-            speed = 0.05 + light_level * 0.1
+            # Slow rotation — one full circle every 30–60 seconds
+            # depending on light level
+            angular_speed = 0.02 + light_level * 0.04
 
-            # Golden ratio inverse (0.618) prevents pan/tilt cycles from
-            # syncing, giving organic-feeling paths that take a long time
-            # to visually repeat
-            pan  = PAN_CENTRE  + amplitude * math.sin(speed * t)
-            tilt = TILT_CENTRE + tilt_amp  * math.sin(speed * t * 0.618)
+            # Slow drift that offsets the circle centre over time,
+            # so the pattern is an evolving meander rather than a
+            # fixed loop. Drift period ~8x slower than the main circle.
+            drift_speed = angular_speed * 0.13
+            drift_pan   = pan_amp  * 0.3 * math.sin(drift_speed * t)
+            drift_tilt  = tilt_amp * 0.3 * math.cos(drift_speed * t * 0.618)
+
+            pan  = PAN_CENTRE  + drift_pan  + pan_amp  * 0.7 * math.cos(angular_speed * t)
+            tilt = TILT_CENTRE + drift_tilt + tilt_amp * 0.7 * math.sin(angular_speed * t)
 
             move_to(PAN_ID,  pan)
             move_to(TILT_ID, tilt)
@@ -225,10 +244,12 @@ try:
                   f"pan={int(pan)}  tilt={int(tilt)}    ", end='')
 
             t += 0.1
-            time.sleep(0.1)
+            time.sleep(0.05)
 
             if light_level < EXPLORE_THRESHOLD:
                 print(f"\n** LOST LOCK at light={light_level:.2f} **")
+                set_velocity(PAN_ID,  SEEK_VELOCITY)
+                set_velocity(TILT_ID, SEEK_VELOCITY)
                 mode      = 'seek'
                 seek_step = 0
 
