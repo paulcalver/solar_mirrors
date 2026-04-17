@@ -27,7 +27,7 @@ PAN_ID       = 1
 TILT_ID      = 2
 
 # ── Position limits ────────────────────────────────────────
-PAN_CENTRE   = 1140
+PAN_CENTRE   = 1300
 TILT_CENTRE  = 850
 PAN_RANGE    = 200
 TILT_RANGE   = 100
@@ -204,12 +204,20 @@ try:
 
         # ── Explore mode ───────────────────────────────────
         elif mode == 'explore':
-            amplitude = PAN_RANGE  * light_level
-            tilt_amp  = TILT_RANGE * light_level
-            speed     = 0.5 + light_level * 1.5
+            # Amplitude scales gently with light (0.6 to 1.0 of full range)
+            # so the mirror always explores meaningfully once locked
+            amp_scale = 0.6 + 0.4 * light_level
+            amplitude = PAN_RANGE  * amp_scale
+            tilt_amp  = TILT_RANGE * amp_scale
 
+            # Slow, meditative frequency — one pan cycle every 40–80 seconds
+            speed = 0.05 + light_level * 0.1
+
+            # Golden ratio inverse (0.618) prevents pan/tilt cycles from
+            # syncing, giving organic-feeling paths that take a long time
+            # to visually repeat
             pan  = PAN_CENTRE  + amplitude * math.sin(speed * t)
-            tilt = TILT_CENTRE + tilt_amp  * math.sin(speed * t * 0.7)
+            tilt = TILT_CENTRE + tilt_amp  * math.sin(speed * t * 0.618)
 
             move_to(PAN_ID,  pan)
             move_to(TILT_ID, tilt)
@@ -217,7 +225,7 @@ try:
                   f"pan={int(pan)}  tilt={int(tilt)}    ", end='')
 
             t += 0.1
-            time.sleep(0.05)
+            time.sleep(0.1)
 
             if light_level < EXPLORE_THRESHOLD:
                 print(f"\n** LOST LOCK at light={light_level:.2f} **")
