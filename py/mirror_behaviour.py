@@ -19,10 +19,13 @@ DEVICENAME   = '/dev/ttyUSB0'
 BAUDRATE     = 57600
 PROTOCOL     = 2.0
 
-ADDR_TORQUE  = 64
-ADDR_GOAL    = 116
-ADDR_POS     = 132
-ADDR_PROFILE_VEL     = 112
+ADDR_TORQUE      = 64
+ADDR_GOAL        = 116
+ADDR_POS         = 132
+ADDR_PROFILE_VEL = 112
+ADDR_POS_P_GAIN  = 84
+ADDR_POS_I_GAIN  = 82
+ADDR_POS_D_GAIN  = 80
 
 PAN_ID       = 1
 TILT_ID      = 2
@@ -32,17 +35,18 @@ PAN_CENTRE   = 1295
 TILT_CENTRE  = 825
 
 # Explore mode — small circles around a locked centre
-EXPLORE_PAN_RANGE    = 25
-EXPLORE_TILT_RANGE   = 25
+EXPLORE_PAN_RANGE    = 15
+EXPLORE_TILT_RANGE   = 22
 
-# Seek mode — wider spiral search
-SEEK_PAN_RADIUS      = 25   # counts per ring (existing default)
-SEEK_TILT_RADIUS     = 15   # counts per ring (existing default)
-SEEK_MAX_RINGS       = 5
+# Seek mode — wandering noise-based drift
+SEEK_PAN_RANGE       = 125   # max drift from centre in pan
+SEEK_TILT_RANGE      = 75    # max drift from centre in tilt
+SEEK_EXPANSION_TIME  = 120.0 # seconds for search to reach full range
+SEEK_START_FRACTION  = 0.3   # starts at 30% of max range
 
 # ── Motion profile ──────────────────────────────────────────
-SEEK_VELOCITY    = 15    # slow, smooth steps in seek mode (0 = instant)
-EXPLORE_VELOCITY = 4     # let explore mode's sine-wave commands drive motion
+SEEK_VELOCITY    = 15    # slow, smooth motion in seek mode
+EXPLORE_VELOCITY = 4     # slow glide between waypoints
 
 # ── Light level configuration ──────────────────────────────
 SEEK_THRESHOLD    = 0.30
@@ -87,11 +91,7 @@ portHandler.setBaudRate(BAUDRATE)
 print("Connected to servos\n")
 
 # ── Helper functions ───────────────────────────────────────
-ADDR_POS_P_GAIN = 84
-ADDR_POS_I_GAIN = 82
-ADDR_POS_D_GAIN = 80
-
-def set_pid_gains(sid, p=800, i=0, d=0):
+def set_pid_gains(sid, p=1500, i=0, d=500):
     """Set position PID gains. Higher P = more responsive to small errors."""
     packetHandler.write2ByteTxRx(portHandler, sid, ADDR_POS_P_GAIN, p)
     packetHandler.write2ByteTxRx(portHandler, sid, ADDR_POS_I_GAIN, i)
@@ -111,19 +111,13 @@ def move_to(sid, position):
     position = max(0, min(4095, int(position)))
     packetHandler.write4ByteTxRx(portHandler, sid, ADDR_GOAL, position)
 
-def get_spiral_position(step, pan_centre, tilt_centre):
-    """Generate expanding spiral search pattern"""
-    steps_per_ring = 16
-    ring  = step // steps_per_ring
-    angle = (step % steps_per_ring) * (2 * math.pi / steps_per_ring)
-
-    radius_pan  = ring * SEEK_PAN_RADIUS
-    radius_tilt = ring * SEEK_TILT_RADIUS
-
-    pan  = pan_centre  + int(radius_pan  * math.sin(angle))
-    tilt = tilt_centre + int(radius_tilt * math.cos(angle))
-
-    return pan, tilt
+def smooth_noise(t, offset=0.0):
+    """Smooth pseudo-random drift using incommensurate sine frequencies.
+    Returns a value roughly in [-1, 1] that varies continuously over time.
+    Uses three incommensurate frequencies so the pattern never exactly repeats."""
+    return (math.sin(t * 0.13 + offset) * 0.5 +
+            math.sin(t * 0.07 + offset * 1.7) * 0.3 +
+            math.sin(t * 0.03 + offset * 2.3) * 0.2)
 
 def read_voltage():
     """Read voltage from A0. Returns None on read failure."""
@@ -174,12 +168,12 @@ def check_keypress():
             return 'quit'
     return None
 
-# ── Enable torque ──────────────────────────────────────────
+# ── Enable torque and configure servos ────────────────────
 enable_torque(PAN_ID)
 enable_torque(TILT_ID)
 set_pid_gains(PAN_ID,  p=1500, i=0, d=500)
 set_pid_gains(TILT_ID, p=1500, i=0, d=500)
-set_velocity(PAN_ID,  SEEK_VELOCITY)  
+set_velocity(PAN_ID,  SEEK_VELOCITY)
 set_velocity(TILT_ID, SEEK_VELOCITY)
 move_to(PAN_ID,  PAN_CENTRE)
 move_to(TILT_ID, TILT_CENTRE)
@@ -194,9 +188,9 @@ else:
 print("─" * 50)
 
 # ── Main loop ──────────────────────────────────────────────
-mode      = 'seek'
-seek_step = 0
-t         = 0
+mode       = 'seek'
+seek_time  = 0.0   # elapsed time in seek mode (for expansion ramp)
+t          = 0     # explore mode trajectory time
 
 try:
     while True:
@@ -210,23 +204,31 @@ try:
 
         # ── Seek mode ──────────────────────────────────────
         if mode == 'seek':
-            pan, tilt = get_spiral_position(seek_step, PAN_CENTRE, TILT_CENTRE)
+            # Search radius slowly expands from SEEK_START_FRACTION to 1.0
+            # over SEEK_EXPANSION_TIME seconds, giving the mirror a sense
+            # of gradually widening its attention.
+            expansion = min(1.0, seek_time / SEEK_EXPANSION_TIME)
+            radius_scale = SEEK_START_FRACTION + (1.0 - SEEK_START_FRACTION) * expansion
 
-            # Clamp to safe range
-            pan  = max(512,  min(1536, pan))
-            tilt = max(768,  min(1280, tilt))
+            pan_amp  = SEEK_PAN_RANGE  * radius_scale
+            tilt_amp = SEEK_TILT_RANGE * radius_scale
+
+            # Pan and tilt use independent noise offsets so motion is uncorrelated
+            pan  = PAN_CENTRE  + pan_amp  * smooth_noise(seek_time, offset=0.0)
+            tilt = TILT_CENTRE + tilt_amp * smooth_noise(seek_time, offset=100.0)
+
+            # Safety clamps
+            pan  = max(512, min(1536, pan))
+            tilt = max(768, min(1280, tilt))
 
             move_to(PAN_ID,  pan)
             move_to(TILT_ID, tilt)
             print(f"\rSEEKING  light={light_level:.2f}  "
-                  f"pan={pan}  tilt={tilt}    ", end='')
+                  f"radius={radius_scale:.2f}  "
+                  f"pan={int(pan)}  tilt={int(tilt)}    ", end='')
 
-            time.sleep(0.6)
-            seek_step += 1
-
-            # Reset after N rings
-            if seek_step > 16 * SEEK_MAX_RINGS:
-                seek_step = 0
+            time.sleep(0.1)
+            seek_time += 0.1
 
             if light_level >= SEEK_THRESHOLD:
                 print(f"\n** LOCKED at light={light_level:.2f} **")
@@ -241,7 +243,7 @@ try:
             # between waypoints. We command a new waypoint every ~1 second
             # and let the servo glide there using its internal controller.
 
-            amp_scale = 0.1 + 0.9 * light_level
+            amp_scale = 0.6 + 0.4 * light_level
             pan_amp   = EXPLORE_PAN_RANGE  * amp_scale
             tilt_amp  = EXPLORE_TILT_RANGE * amp_scale
 
@@ -273,7 +275,7 @@ try:
                 set_velocity(PAN_ID,  SEEK_VELOCITY)
                 set_velocity(TILT_ID, SEEK_VELOCITY)
                 mode      = 'seek'
-                seek_step = 0
+                seek_time = 0.0   # reset expansion so search starts tight again
 
 finally:
     print("\nShutting down")
