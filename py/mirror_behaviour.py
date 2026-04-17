@@ -23,6 +23,7 @@ ADDR_TORQUE      = 64
 ADDR_GOAL        = 116
 ADDR_POS         = 132
 ADDR_PROFILE_VEL = 112
+ADDR_PROFILE_ACC = 108
 ADDR_POS_P_GAIN  = 84
 ADDR_POS_I_GAIN  = 82
 ADDR_POS_D_GAIN  = 80
@@ -31,35 +32,45 @@ PAN_ID       = 1
 TILT_ID      = 2
 
 # ── Position limits ────────────────────────────────────────
-PAN_CENTRE   = 1295
-TILT_CENTRE  = 825
+PAN_CENTRE   = 1142
+TILT_CENTRE  = 845
 
 # Explore mode — small circles around a locked centre
 EXPLORE_PAN_RANGE    = 15
 EXPLORE_TILT_RANGE   = 22
 
 # Seek mode — wandering noise-based drift
-SEEK_PAN_RANGE       = 125   # max drift from centre in pan
-SEEK_TILT_RANGE      = 75    # max drift from centre in tilt
-SEEK_EXPANSION_TIME  = 120.0 # seconds for search to reach full range
-SEEK_START_FRACTION  = 0.3   # starts at 30% of max range
+SEEK_PAN_RANGE       = 125
+SEEK_TILT_RANGE      = 75
+SEEK_EXPANSION_TIME  = 120.0
+SEEK_START_FRACTION  = 0.3
 
-# ── Motion profile ──────────────────────────────────────────
-SEEK_VELOCITY    = 15    # slow, smooth motion in seek mode
-EXPLORE_VELOCITY = 4     # slow glide between waypoints
+# ── Motion control: continuous position streaming ──────────
+# We command positions at 50Hz and let the servo's PID track the
+# continuously-moving target. Profile Velocity = 0 (no cap) means
+# the PID responds to each new target immediately. Profile Acceleration
+# smooths the PID's response so there's no snap at each command.
+UPDATE_RATE_HZ       = 50
+UPDATE_PERIOD        = 1.0 / UPDATE_RATE_HZ   # 0.02s
+PROFILE_ACCELERATION = 30   # lower = smoother easing
 
 # ── Light level configuration ──────────────────────────────
 SEEK_THRESHOLD    = 0.30
 EXPLORE_THRESHOLD = 0.15
 
-# Voltage-to-light-level mapping (based on divider output at A0)
-# 0.0V at A0 = darkness, 3.0V at A0 = full panel output (~12V before divider)
-VOLTAGE_MIN    = 0.1   # below this we call it 'dark' (noise floor)
-VOLTAGE_MAX    = 2.8   # above this we call it 'full light'
-SAMPLE_WINDOW  = 8     # number of readings to average
+VOLTAGE_MIN    = 0.1
+VOLTAGE_MAX    = 2.8
+SAMPLE_WINDOW  = 8
 
 light_level = 0.0
 voltage_history = deque(maxlen=SAMPLE_WINDOW)
+
+# ── ADC read timing ────────────────────────────────────────
+# ADS1115 at data_rate=8 returns a new reading every ~125ms.
+# We don't need to read every loop iteration (50Hz would just return
+# the same value repeatedly). Read roughly every 200ms instead.
+ADC_READ_INTERVAL = 0.2
+last_adc_read     = 0.0
 
 # ── Initialise ADS1115 (only if not simulating) ────────────
 ads_channel = None
@@ -72,7 +83,7 @@ if not args.simulate:
 
         i2c = busio.I2C(board.SCL, board.SDA)
         ads = ADS1115(i2c)
-        ads.data_rate = 8    # slowest rate = internal averaging smooths PWM
+        ads.data_rate = 8
         ads_channel = AnalogIn(ads, 0)
         print("ADS1115 initialised on A0")
     except Exception as e:
@@ -92,14 +103,15 @@ print("Connected to servos\n")
 
 # ── Helper functions ───────────────────────────────────────
 def set_pid_gains(sid, p=1500, i=0, d=500):
-    """Set position PID gains. Higher P = more responsive to small errors."""
     packetHandler.write2ByteTxRx(portHandler, sid, ADDR_POS_P_GAIN, p)
     packetHandler.write2ByteTxRx(portHandler, sid, ADDR_POS_I_GAIN, i)
     packetHandler.write2ByteTxRx(portHandler, sid, ADDR_POS_D_GAIN, d)
 
 def set_velocity(sid, velocity):
-    """Set profile velocity. Lower = slower/smoother, 0 = max speed."""
     packetHandler.write4ByteTxRx(portHandler, sid, ADDR_PROFILE_VEL, velocity)
+
+def set_acceleration(sid, acceleration):
+    packetHandler.write4ByteTxRx(portHandler, sid, ADDR_PROFILE_ACC, acceleration)
 
 def enable_torque(sid):
     packetHandler.write1ByteTxRx(portHandler, sid, ADDR_TORQUE, 1)
@@ -113,21 +125,18 @@ def move_to(sid, position):
 
 def smooth_noise(t, offset=0.0):
     """Smooth pseudo-random drift using incommensurate sine frequencies.
-    Returns a value roughly in [-1, 1] that varies continuously over time.
-    Uses three incommensurate frequencies so the pattern never exactly repeats."""
+    Returns a value roughly in [-1, 1] that varies continuously over time."""
     return (math.sin(t * 0.13 + offset) * 0.5 +
             math.sin(t * 0.07 + offset * 1.7) * 0.3 +
             math.sin(t * 0.03 + offset * 2.3) * 0.2)
 
 def read_voltage():
-    """Read voltage from A0. Returns None on read failure."""
     try:
         return ads_channel.voltage
     except OSError:
         return None
 
 def update_light_level_from_adc():
-    """Sample the ADC, update rolling average, return light level 0.0–1.0."""
     global light_level
 
     v = read_voltage()
@@ -135,11 +144,10 @@ def update_light_level_from_adc():
         voltage_history.append(v)
 
     if not voltage_history:
-        return light_level  # no data yet, keep previous
+        return light_level
 
     avg_voltage = sum(voltage_history) / len(voltage_history)
 
-    # Map to 0.0–1.0 range with clipping
     if avg_voltage <= VOLTAGE_MIN:
         light_level = 0.0
     elif avg_voltage >= VOLTAGE_MAX:
@@ -150,7 +158,6 @@ def update_light_level_from_adc():
     return light_level
 
 def check_keypress():
-    """Check for keypress input (used in simulation mode or for quit)."""
     global light_level
     if select.select([sys.stdin], [], [], 0)[0]:
         key = sys.stdin.read(1)
@@ -173,8 +180,15 @@ enable_torque(PAN_ID)
 enable_torque(TILT_ID)
 set_pid_gains(PAN_ID,  p=1500, i=0, d=500)
 set_pid_gains(TILT_ID, p=1500, i=0, d=500)
-set_velocity(PAN_ID,  SEEK_VELOCITY)
-set_velocity(TILT_ID, SEEK_VELOCITY)
+
+# Zero velocity cap = let PID respond freely to moving targets
+set_velocity(PAN_ID,  0)
+set_velocity(TILT_ID, 0)
+
+# Acceleration profile smooths response to sudden target changes
+set_acceleration(PAN_ID,  PROFILE_ACCELERATION)
+set_acceleration(TILT_ID, PROFILE_ACCELERATION)
+
 move_to(PAN_ID,  PAN_CENTRE)
 move_to(TILT_ID, TILT_CENTRE)
 time.sleep(1)
@@ -185,72 +199,75 @@ if args.simulate:
 else:
     print("LIVE MODE (reading from ADS1115)")
     print("Controls: q = quit")
+print(f"Update rate: {UPDATE_RATE_HZ}Hz  Profile accel: {PROFILE_ACCELERATION}")
 print("─" * 50)
 
 # ── Main loop ──────────────────────────────────────────────
+# One unified high-rate loop. Mode determines how the commanded
+# position is calculated, but commands always stream at UPDATE_RATE_HZ
+# so the servos are always tracking a continuously-moving target.
+
 mode       = 'seek'
-seek_time  = 0.0   # elapsed time in seek mode (for expansion ramp)
-t          = 0     # explore mode trajectory time
+seek_time  = 0.0   # continuous time in seek mode
+t          = 0.0   # continuous time in explore mode
+loop_start = time.time()
 
 try:
     while True:
-        # ── Update light level ─────────────────────────────
-        if not args.simulate:
-            update_light_level_from_adc()
+        loop_time_start = time.time()
 
-        # ── Check for keypress (always, for 'q' at minimum) ─
+        # ── Update light level (throttled to ADC rate) ─────
+        if not args.simulate:
+            if loop_time_start - last_adc_read >= ADC_READ_INTERVAL:
+                update_light_level_from_adc()
+                last_adc_read = loop_time_start
+
+        # ── Keypress check ─────────────────────────────────
         if check_keypress() == 'quit':
             break
 
         # ── Seek mode ──────────────────────────────────────
         if mode == 'seek':
             # Search radius slowly expands from SEEK_START_FRACTION to 1.0
-            # over SEEK_EXPANSION_TIME seconds, giving the mirror a sense
-            # of gradually widening its attention.
             expansion = min(1.0, seek_time / SEEK_EXPANSION_TIME)
             radius_scale = SEEK_START_FRACTION + (1.0 - SEEK_START_FRACTION) * expansion
 
             pan_amp  = SEEK_PAN_RANGE  * radius_scale
             tilt_amp = SEEK_TILT_RANGE * radius_scale
 
-            # Pan and tilt use independent noise offsets so motion is uncorrelated
             pan  = PAN_CENTRE  + pan_amp  * smooth_noise(seek_time, offset=0.0)
             tilt = TILT_CENTRE + tilt_amp * smooth_noise(seek_time, offset=100.0)
 
-            # Safety clamps
             pan  = max(512, min(1536, pan))
             tilt = max(768, min(1280, tilt))
 
             move_to(PAN_ID,  pan)
             move_to(TILT_ID, tilt)
-            print(f"\rSEEKING  light={light_level:.2f}  "
-                  f"radius={radius_scale:.2f}  "
-                  f"pan={int(pan)}  tilt={int(tilt)}    ", end='')
 
-            time.sleep(0.1)
-            seek_time += 0.1
+            # Print at reduced rate to avoid flooding terminal
+            if int(seek_time * 10) % 5 == 0:
+                print(f"\rSEEKING   light={light_level:.2f}  "
+                      f"radius={radius_scale:.2f}  "
+                      f"pan={int(pan)}  tilt={int(tilt)}    ",
+                      end='', flush=True)
+
+            seek_time += UPDATE_PERIOD
 
             if light_level >= SEEK_THRESHOLD:
                 print(f"\n** LOCKED at light={light_level:.2f} **")
-                set_velocity(PAN_ID,  EXPLORE_VELOCITY)
-                set_velocity(TILT_ID, EXPLORE_VELOCITY)
                 mode = 'explore'
-                t    = 0
+                t    = 0.0
 
         # ── Explore mode ───────────────────────────────────
         elif mode == 'explore':
-            # Use the servo's own velocity profile to create smooth motion
-            # between waypoints. We command a new waypoint every ~1 second
-            # and let the servo glide there using its internal controller.
-
             amp_scale = 0.6 + 0.4 * light_level
             pan_amp   = EXPLORE_PAN_RANGE  * amp_scale
             tilt_amp  = EXPLORE_TILT_RANGE * amp_scale
 
-            # Slow circle — one full loop every ~60 seconds
+            # Slow circle — one full loop every ~60s
             angular_speed = 0.10 + light_level * 0.05
 
-            # Ramp-in to prevent jump at entry
+            # Ramp-in over first 3 seconds to prevent jump on entry
             RAMP_DURATION = 3.0
             ramp = min(1.0, t / RAMP_DURATION)
             ramp = ramp * ramp * (3 - 2 * ramp)  # smoothstep
@@ -264,18 +281,27 @@ try:
 
             move_to(PAN_ID,  pan)
             move_to(TILT_ID, tilt)
-            print(f"\rEXPLORING  light={light_level:.2f}  ramp={ramp:.2f}  "
-                  f"pan={int(pan)}  tilt={int(tilt)}    ", end='')
 
-            t += 1.0           # big time step — waypoint every second
-            time.sleep(1.0)    # wait for servo to glide there
+            # Print at reduced rate
+            if int(t * 10) % 5 == 0:
+                print(f"\rEXPLORING light={light_level:.2f}  ramp={ramp:.2f}  "
+                      f"pan={int(pan)}  tilt={int(tilt)}    ",
+                      end='', flush=True)
+
+            t += UPDATE_PERIOD
 
             if light_level < EXPLORE_THRESHOLD:
                 print(f"\n** LOST LOCK at light={light_level:.2f} **")
-                set_velocity(PAN_ID,  SEEK_VELOCITY)
-                set_velocity(TILT_ID, SEEK_VELOCITY)
                 mode      = 'seek'
-                seek_time = 0.0   # reset expansion so search starts tight again
+                seek_time = 0.0
+
+        # ── Maintain loop timing ───────────────────────────
+        # Sleep just long enough to hit UPDATE_PERIOD consistently,
+        # compensating for how long the work above took.
+        elapsed = time.time() - loop_time_start
+        sleep_time = UPDATE_PERIOD - elapsed
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
 finally:
     print("\nShutting down")
