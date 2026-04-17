@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; padding: 8px; font-size: 12px; }
+  h2 { text-align: center; color: #e0e0e0; margin-bottom: 6px; font-size: 13px; }
+  .outer { display: flex; gap: 8px; flex-wrap: wrap; }
+  .views { flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 8px; }
+  .elev-row { display: flex; gap: 8px; }
+  .elev-row > div { flex: 1; }
+  .vl { font-size: 9px; color: #aaa; text-align: center; margin-bottom: 2px; }
+  .ctrl { width: 238px; background: #2a2a4a; border-radius: 10px; padding: 10px; overflow-y: auto; max-height: 98vh; }
+  .ctrl h3 { color: #f39c12; margin-bottom: 6px; font-size: 12px; }
+  .cg { margin-bottom: 5px; }
+  .cg label { display: block; color: #aaa; margin-bottom: 2px; font-size: 9px; }
+  .cg input[type=number],.cg input[type=date],.cg input[type=time] { width:100%; padding:3px 5px; border-radius:4px; border:1px solid #444; background:#1a1a2e; color:#eee; font-size:10px; }
+  .cg input[type=range] { width:100%; accent-color:#e67e22; }
+  .cg input[type=checkbox] { width:auto; margin-right:4px; }
+  .cg .rv { color:#f39c12; font-size:9px; float:right; }
+  .st { font-size:10px; font-weight:bold; margin:7px 0 3px; border-top:1px solid #3a3a5a; padding-top:5px; }
+  .st.m1{color:#e67e22;} .st.m2{color:#9b59b6;} .st.room{color:#f39c12;} .st.sun{color:#f39c12;} .st.panel{color:#27ae60;}
+  .stat-box { background:#1a1a2e; border-radius:5px; padding:6px; margin-top:6px; font-size:9px; line-height:1.9; }
+  .v{color:#2ecc71;font-weight:bold;} .vw{color:#e74c3c;font-weight:bold;} .vm{color:#f39c12;font-weight:bold;}
+  svg { width:100%; height:auto; border-radius:6px; background:#16213e; }
+</style>
+</head>
+<body>
+<h2>Room Mirror Planner v8 — Three View</h2>
+<div class="outer">
+  <div class="views">
+
+    <!-- PLAN VIEW -->
+    <div>
+      <div class="vl">📐 TOP-DOWN PLAN</div>
+      <svg id="svg-plan" viewBox="0 0 500 300" xmlns="http://www.w3.org/2000/svg">
+        <rect width="500" height="300" fill="#16213e" rx="6"/>
+        <rect id="p-room" x="40" y="25" width="300" height="250" fill="#1e2d4a" stroke="#4a6fa5" stroke-width="2"/>
+        <text x="190" y="16"  text-anchor="middle" font-size="8" fill="#85c1e9">WINDOW WALL (ENE)</text>
+        <text x="190" y="288" text-anchor="middle" font-size="8" fill="#4a6fa5">SOUTH WALL</text>
+        <text x="20"  y="150" text-anchor="middle" font-size="8" fill="#e67e22" transform="rotate(-90,20,150)">MIRROR 1 WALL</text>
+        <text x="358" y="150" text-anchor="middle" font-size="8" fill="#4a6fa5" transform="rotate(90,358,150)">EAST WALL</text>
+        <!-- Sunlit patch -->
+        <polygon id="p-patch" points="100,25 180,25 180,275 100,275" fill="#f39c12" opacity="0.07"/>
+        <line id="p-bl" x1="100" y1="30" x2="100" y2="275" stroke="#f39c12" stroke-width="1" opacity="0.15" stroke-dasharray="4,4"/>
+        <line id="p-br" x1="180" y1="30" x2="180" y2="275" stroke="#f39c12" stroke-width="1" opacity="0.15" stroke-dasharray="4,4"/>
+        <line id="p-bc" x1="140" y1="30" x2="140" y2="200" stroke="#f39c12" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.6"/>
+        <!-- Window -->
+        <rect id="p-win" x="80" y="23" width="100" height="6" rx="2" fill="#85c1e9" stroke="#2e86c1" stroke-width="1.5"/>
+        <!-- Panel on window wall -->
+        <rect id="p-panel" x="183" y="23" width="10" height="6" rx="1" fill="#27ae60" stroke="#1e8449" stroke-width="1.5"/>
+        <text id="p-plbl" x="188" y="17" text-anchor="middle" font-size="7" fill="#27ae60">Panel</text>
+        <!-- Rays -->
+        <line id="p-ray1" x1="140" y1="30" x2="42" y2="130" stroke="#f39c12" stroke-width="2" stroke-dasharray="6,3" opacity="0.8"/>
+        <line id="p-ray2" x1="42" y1="130" x2="220" y2="190" stroke="#e67e22" stroke-width="2" stroke-dasharray="6,3" opacity="0.8"/>
+        <line id="p-ray3" x1="220" y1="190" x2="188" y2="27" stroke="#27ae60" stroke-width="2" stroke-dasharray="6,3" opacity="0.8"/>
+        <!-- Arrows -->
+        <polygon id="p-arr1" points="44,122 38,136 50,132" fill="#f39c12" opacity="0.8"/>
+        <polygon id="p-arr2" points="212,182 222,196 226,182" fill="#e67e22" opacity="0.8"/>
+        <polygon id="p-arr3" points="184,35 188,23 192,35" fill="#27ae60" opacity="0.8"/>
+        <!-- M1 -->
+        <rect id="p-m1" x="37" y="122" width="7" height="16" rx="2" fill="#2c3e50" stroke="#e67e22" stroke-width="2"/>
+        <text id="p-m1lbl" x="28" y="132" text-anchor="middle" font-size="7" fill="#e67e22">M1</text>
+        <!-- M2 freestanding -->
+        <circle id="p-m2" cx="220" cy="190" r="9" fill="#2c3e50" stroke="#9b59b6" stroke-width="2"/>
+        <text id="p-m2lbl" x="220" y="194" text-anchor="middle" font-size="7" fill="#9b59b6">M2</text>
+        <line id="p-m2arr" x1="220" y1="190" x2="220" y2="177" stroke="#9b59b6" stroke-width="1.5" stroke-dasharray="3,2" opacity="0.7"/>
+        <!-- Chain labels -->
+        <text id="p-s1" x="85"  y="80"  text-anchor="middle" font-size="8" fill="#f39c12">①</text>
+        <text id="p-s2" x="140" y="175" text-anchor="middle" font-size="8" fill="#e67e22">②</text>
+        <text id="p-s3" x="215" y="110" text-anchor="middle" font-size="8" fill="#27ae60">③</text>
+        <!-- Origin -->
+        <circle cx="40" cy="25" r="3" fill="#8e44ad"/>
+        <!-- Compass -->
+        <g transform="translate(456,50)">
+          <circle cx="0" cy="0" r="17" fill="#0f3460" stroke="#4a6fa5" stroke-width="1"/>
+          <polygon points="0,-11 -3,4 0,1 3,4" fill="#e74c3c"/>
+          <polygon points="0,11 -3,-4 0,-1 3,-4" fill="#eee"/>
+          <text x="0" y="-14" text-anchor="middle" font-size="7" fill="#e74c3c">N</text>
+          <text x="0" y="21"  text-anchor="middle" font-size="7" fill="#eee">S</text>
+          <text x="-19" y="3" text-anchor="middle" font-size="7" fill="#eee">W</text>
+          <text x="19"  y="3" text-anchor="middle" font-size="7" fill="#eee">E</text>
+          <circle id="p-sundot" cx="0" cy="-11" r="5" fill="#f39c12"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- TWO ELEVATIONS SIDE BY SIDE -->
+    <div class="elev-row">
+
+      <!-- ELEVATION 1: looking at mirror 1 wall (west wall), window wall on RIGHT -->
+      <div>
+        <div class="vl">👁 ELEV A — Mirror 1 wall (window wall right →)</div>
+        <svg id="svg-e1" viewBox="0 0 260 220" xmlns="http://www.w3.org/2000/svg">
+          <rect width="260" height="220" fill="#16213e" rx="6"/>
+          <rect id="e1-wall" x="20" y="10" width="200" height="180" fill="#1e2d4a" stroke="#85c1e9" stroke-width="1.5"/>
+          <line x1="20" y1="190" x2="220" y2="190" stroke="#4a6fa5" stroke-width="1"/>
+          <line x1="20" y1="10"  x2="220" y2="10"  stroke="#4a6fa5" stroke-width="0.5"/>
+          <!-- Labels -->
+          <text x="120" y="208" text-anchor="middle" font-size="7" fill="#4a6fa5">← South ——————— North →</text>
+          <text x="8"   y="100" text-anchor="middle" font-size="7" fill="#4a6fa5" transform="rotate(-90,8,100)">Floor→Ceil</text>
+          <!-- Window wall strip on right -->
+          <rect id="e1-wins" x="212" y="60" width="6" height="70" rx="1" fill="#85c1e9" opacity="0.5"/>
+          <text x="234" y="100" text-anchor="middle" font-size="6" fill="#85c1e9" transform="rotate(90,234,100)">win wall</text>
+          <!-- Panel below window on right -->
+          <rect id="e1-panel" x="212" y="148" width="6" height="14" rx="1" fill="#27ae60" stroke="#1e8449" stroke-width="1"/>
+          <!-- Sunlit patch -->
+          <polygon id="e1-patch" points="220,10 220,80 100,190 100,140" fill="#f39c12" opacity="0.09"/>
+          <line id="e1-btop" x1="220" y1="10"  x2="40"  y2="190" stroke="#f39c12" stroke-width="1" opacity="0.25" stroke-dasharray="4,3"/>
+          <line id="e1-bbot" x1="220" y1="80" x2="120"  y2="190" stroke="#f39c12" stroke-width="1" opacity="0.25" stroke-dasharray="4,3"/>
+          <line id="e1-bcen" x1="220" y1="45"  x2="80"  y2="190" stroke="#f39c12" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.8"/>
+          <!-- M1 on wall -->
+          <rect id="e1-m1" x="108" y="90" width="10" height="36" rx="2" fill="#2c3e50" stroke="#e67e22" stroke-width="2"/>
+          <rect id="e1-m1g" x="106" y="88" width="14" height="40" rx="3" fill="none" stroke="#f39c12" stroke-width="2.5" opacity="0"/>
+          <text id="e1-m1l" x="113" y="112" text-anchor="middle" font-size="7" font-weight="bold" fill="#e67e22">M1</text>
+          <!-- Reflected ray from M1 -->
+          <line id="e1-ray2" x1="113" y1="108" x2="60" y2="80" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.7"/>
+          <polygon id="e1-arr2" points="62,72 56,84 68,82" fill="#e67e22" opacity="0.7"/>
+          <text id="e1-r2l" x="70" y="74" text-anchor="middle" font-size="6" fill="#e67e22">→M2</text>
+          <!-- Floor/ceil labels -->
+          <text x="16" y="193" text-anchor="end" font-size="6" fill="#4a6fa5">0m</text>
+          <text id="e1-cl" x="16" y="13"  text-anchor="end" font-size="6" fill="#4a6fa5">3m</text>
+          <!-- Beam angle -->
+          <text id="e1-al" x="120" y="8" text-anchor="middle" font-size="7" fill="#f39c12">alt: --</text>
+          <!-- Win dim -->
+          <line id="e1-wd"  x1="228" y1="60" x2="228" y2="130" stroke="#85c1e9" stroke-width="0.8"/>
+          <line id="e1-wdt" x1="224" y1="60"  x2="232" y2="60"  stroke="#85c1e9" stroke-width="1"/>
+          <line id="e1-wdb" x1="224" y1="130" x2="232" y2="130" stroke="#85c1e9" stroke-width="1"/>
+          <text id="e1-wdl" x="244" y="97" text-anchor="middle" font-size="6" fill="#85c1e9">win</text>
+        </svg>
+      </div>
+
+      <!-- ELEVATION 2: looking at east wall, M2 freestanding, beam from left -->
+      <div>
+        <div class="vl">👁 ELEV B — East wall view (M1 wall left ←, window wall right →)</div>
+        <svg id="svg-e2" viewBox="0 0 260 220" xmlns="http://www.w3.org/2000/svg">
+          <rect width="260" height="220" fill="#16213e" rx="6"/>
+          <!-- East wall face -->
+          <rect id="e2-wall" x="20" y="10" width="200" height="180" fill="#1e2d4a" stroke="#4a6fa5" stroke-width="1.5"/>
+          <line x1="20" y1="190" x2="220" y2="190" stroke="#4a6fa5" stroke-width="1"/>
+          <line x1="20" y1="10"  x2="220" y2="10"  stroke="#4a6fa5" stroke-width="0.5"/>
+          <!-- Labels -->
+          <!-- In this view: looking east. Left = west (M1 wall), Right = east wall far end = window wall side -->
+          <!-- Horizontal axis = X (west→east in room = left→right here... wait)
+               Looking at east wall from inside room:
+               Left side = north (window wall), Right side = south wall
+               This matches the plan where north is top -->
+          <text x="120" y="208" text-anchor="middle" font-size="7" fill="#4a6fa5">← North (window) ——————— South →</text>
+          <text x="8"   y="100" text-anchor="middle" font-size="7" fill="#4a6fa5" transform="rotate(-90,8,100)">Floor→Ceil</text>
+          <!-- Window wall indicator on LEFT (north end) -->
+          <rect x="14" y="10" width="6" height="180" rx="1" fill="#85c1e9" opacity="0.08"/>
+          <text x="6" y="100" text-anchor="middle" font-size="6" fill="#85c1e9" transform="rotate(-90,6,100)">win wall</text>
+          <!-- M1 wall indicator (beam comes FROM left/north side) -->
+          <!-- M2 freestanding in front of east wall -->
+          <circle id="e2-m2" cx="120" cy="100" r="9" fill="#2c3e50" stroke="#9b59b6" stroke-width="2"/>
+          <rect id="e2-m2g" x="111" y="91" width="18" height="18" rx="3" fill="none" stroke="#f1c40f" stroke-width="2.5" opacity="0"/>
+          <text id="e2-m2l" x="120" y="104" text-anchor="middle" font-size="7" font-weight="bold" fill="#9b59b6">M2</text>
+          <!-- Incoming beam from M1 (comes from left = north/window side, traveling south-east) -->
+          <!-- In this east-wall elevation view:
+               horizontal = Z axis (north=left=z=0, south=right=z=rs)
+               vertical   = Y axis (floor=bottom, ceil=top)
+               The beam from M1 travels in +x, +z direction at some height
+               In this view we see the beam arriving from the LEFT (north side) at some height -->
+          <line id="e2-ray2in" x1="20" y1="100" x2="110" y2="100" stroke="#e67e22" stroke-width="2" stroke-dasharray="6,3" opacity="0.8"/>
+          <polygon id="e2-arr2in" points="104,96 116,100 104,104" fill="#e67e22" opacity="0.8"/>
+          <text id="e2-r2inl" x="60" y="92" text-anchor="middle" font-size="6" fill="#e67e22">← from M1</text>
+          <!-- Outgoing beam from M2 toward panel (window wall = left/north) -->
+          <line id="e2-ray3" x1="120" y1="100" x2="20" y2="160" stroke="#27ae60" stroke-width="2" stroke-dasharray="6,3" opacity="0.8"/>
+          <polygon id="e2-arr3" points="25,152 16,162 28,165" fill="#27ae60" opacity="0.8"/>
+          <text id="e2-r3l" x="60" y="142" text-anchor="middle" font-size="6" fill="#27ae60">→ to panel</text>
+          <!-- Panel on window wall (left edge, at panel height) -->
+          <rect id="e2-panel" x="14" y="148" width="6" height="14" rx="1" fill="#27ae60" stroke="#1e8449" stroke-width="1.5"/>
+          <text x="6" y="158" text-anchor="middle" font-size="6" fill="#27ae60" transform="rotate(-90,6,158)">panel</text>
+          <!-- Floor/ceil labels -->
+          <text x="16" y="193" text-anchor="end" font-size="6" fill="#4a6fa5">0m</text>
+          <text id="e2-cl" x="16" y="13"  text-anchor="end" font-size="6" fill="#4a6fa5">3m</text>
+          <!-- Height grid lines -->
+          <g id="e2-hgrid"/>
+          <!-- Z grid lines -->
+          <g id="e2-zgrid"/>
+          <!-- M2 height indicator -->
+          <line id="e2-m2h" x1="236" y1="100" x2="236" y2="190" stroke="#9b59b6" stroke-width="0.8" stroke-dasharray="3,2"/>
+          <text id="e2-m2hl" x="248" y="148" text-anchor="middle" font-size="6" fill="#9b59b6">1.5m</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="ctrl">
+    <h3>☀️ Time & Date</h3>
+    <div class="cg"><label>Date</label><input type="date" id="dt" oninput="update()"/></div>
+    <div class="cg"><label>Time (local)</label><input type="time" id="tm" value="09:00" oninput="update()"/></div>
+    <div class="cg"><label><input type="checkbox" id="live" onchange="toggleLive()"/>Live (15s)</label></div>
+
+    <div class="st room">🏠 Room</div>
+    <div class="cg"><label>Room size — square (m)</label><input type="number" id="rs" value="5" step="0.5" min="2" max="20" oninput="update()"/></div>
+    <div class="cg"><label>Ceiling height (m)</label><input type="number" id="ch" value="3.0" step="0.1" oninput="update()"/></div>
+
+    <div class="st sun">📍 Location</div>
+    <div class="cg"><label>Latitude</label><input type="number" id="lat" value="51.5074" step="0.001" oninput="update()"/></div>
+    <div class="cg"><label>Longitude</label><input type="number" id="lon" value="-0.1278" step="0.001" oninput="update()"/></div>
+
+    <div class="st sun">🪟 Window</div>
+    <div class="cg"><label>Left edge from west wall (m)</label><input type="number" id="wl" value="0.5" step="0.1" oninput="update()"/></div>
+    <div class="cg"><label>Right edge from west wall (m)</label><input type="number" id="wr" value="4.5" step="0.1" oninput="update()"/></div>
+    <div class="cg"><label>Window sill height (m)</label><input type="number" id="ws" value="0.9" step="0.1" oninput="update()"/></div>
+    <div class="cg"><label>Window top height (m)</label><input type="number" id="wt" value="2.4" step="0.1" oninput="update()"/></div>
+    <div class="cg"><label>Wall bearing (°)</label><input type="number" id="wb" value="347" step="1" oninput="update()"/></div>
+
+    <div class="st panel">☀️ Solar Panel (window wall, centred)</div>
+    <div class="cg"><label>Height from floor (m)</label><input type="number" id="py" value="0.5" step="0.1" oninput="update()"/></div>
+
+    <div class="st m1">🪞 Mirror 1 (west wall)</div>
+    <div class="cg"><label>Distance from window wall (m)</label><input type="number" id="m1z" value="1.5" step="0.1" oninput="update()"/></div>
+    <div class="cg"><label>Height from floor (m)</label><input type="number" id="m1y" value="1.5" step="0.1" oninput="update()"/></div>
+    <div class="cg"><label>Mirror size (mm)</label><input type="number" id="m1mm" value="80" step="10" oninput="update()"/></div>
+    <div class="cg">
+      <label>Pan — left/right <span class="rv" id="m1pv">0°</span></label>
+      <input type="range" id="m1p" min="-60" max="60" value="0" oninput="update()"/>
+    </div>
+    <div class="cg">
+      <label>Tilt — up/down <span class="rv" id="m1tv">0°</span></label>
+      <input type="range" id="m1t" min="-45" max="45" value="0" oninput="update()"/>
+    </div>
+
+    <div class="st m2">🪞 Mirror 2 (freestanding)</div>
+    <div class="cg"><label>X — from west wall (m)</label><input type="number" id="m2x" value="3.5" step="0.1" oninput="update()"/></div>
+    <div class="cg"><label>Z — from window wall (m)</label><input type="number" id="m2z" value="2.0" step="0.1" oninput="update()"/></div>
+    <div class="cg"><label>Height from floor (m)</label><input type="number" id="m2y" value="1.7" step="0.1" oninput="update()"/></div>
+    <div class="cg"><label>Mirror size (mm)</label><input type="number" id="m2mm" value="80" step="10" oninput="update()"/></div>
+    <div class="cg">
+      <label>Pan — left/right <span class="rv" id="m2pv">0°</span></label>
+      <input type="range" id="m2p" min="-90" max="90" value="0" oninput="update()"/>
+    </div>
+    <div class="cg">
+      <label>Tilt — up/down <span class="rv" id="m2tv">0°</span></label>
+      <input type="range" id="m2t" min="-45" max="45" value="0" oninput="update()"/>
+    </div>
+
+    <div class="st room">📊 Chain Status</div>
+    <div class="stat-box" id="stats">Loading...</div>
+  </div>
+</div>
+
+<script>
+// SVG constants
+const P={ox:40,oy:25,px:300,py:250}; // plan
+const E1={ox:20,oy:10,w:200,h:180};  // elevation 1 (mirror 1 wall)
+const E2={ox:20,oy:10,w:200,h:180};  // elevation 2 (east wall)
+
+let liveT=null;
+document.getElementById('dt').value=new Date().toISOString().split('T')[0];
+
+function toggleLive(){
+  const on=document.getElementById('live').checked;
+  document.getElementById('dt').disabled=on;
+  document.getElementById('tm').disabled=on;
+  if(on){liveT=setInterval(update,15000);update();}else clearInterval(liveT);
+}
+function getDate(){
+  if(document.getElementById('live').checked)return new Date();
+  return new Date(`${document.getElementById('dt').value}T${document.getElementById('tm').value}:00`);
+}
+
+function solarPos(lat,lon,date){
+  const R=Math.PI/180,JD=date.getTime()/86400000+2440587.5,n=JD-2451545;
+  const L=(280.460+0.9856474*n)%360,g=(357.528+0.9856003*n)%360;
+  const lam=L+1.915*Math.sin(g*R)+0.02*Math.sin(2*g*R),eps=23.439-0.0000004*n;
+  const sinDec=Math.sin(eps*R)*Math.sin(lam*R),dec=Math.asin(sinDec)/R;
+  const RA=Math.atan2(Math.cos(eps*R)*Math.sin(lam*R),Math.cos(lam*R))/R;
+  const LMST=((280.46061837+360.98564736629*n)%360+lon+360)%360;
+  const HA=((LMST-RA)%360+360)%360,HAr=HA>180?(HA-360)*R:HA*R;
+  const latR=lat*R,decR=dec*R;
+  const sinAlt=Math.sin(latR)*Math.sin(decR)+Math.cos(latR)*Math.cos(decR)*Math.cos(HAr);
+  const alt=Math.asin(Math.max(-1,Math.min(1,sinAlt)))/R;
+  const cosAz=(Math.sin(decR)-Math.sin(latR)*sinAlt)/(Math.cos(latR)*Math.cos(alt*R));
+  let az=Math.acos(Math.max(-1,Math.min(1,cosAz)))/R;
+  if(Math.sin(HAr)>0)az=360-az;
+  return{alt,az};
+}
+
+function sunBeamDir(az,bearing){
+  const R=Math.PI/180,sunX=Math.sin(az*R),sunZn=Math.cos(az*R),wR=bearing*R;
+  return{bx:sunX*Math.sin(wR)+sunZn*Math.cos(wR),bz:sunX*Math.cos(wR)-sunZn*Math.sin(wR)};
+}
+
+function norm(v){const l=Math.sqrt(v[0]**2+v[1]**2+v[2]**2)||1;return[v[0]/l,v[1]/l,v[2]/l];}
+
+function reflect(inDir,panDeg,tiltDeg,baseNormal){
+  // baseNormal: the default facing direction of the mirror [x,y,z]
+  const R=Math.PI/180,p=panDeg*R,t=tiltDeg*R;
+  // Rotate base normal by pan (around y) then tilt (around perpendicular)
+  const b=norm(baseNormal);
+  // Build rotated normal
+  const nx=b[0]*Math.cos(p)+b[2]*Math.sin(p);
+  const nz=-b[0]*Math.sin(p)+b[2]*Math.cos(p);
+  const ny=Math.sin(t);
+  const nFinal=norm([nx*Math.cos(t),ny,nz*Math.cos(t)]);
+  const dot=inDir[0]*nFinal[0]+inDir[1]*nFinal[1]+inDir[2]*nFinal[2];
+  return norm([inDir[0]-2*dot*nFinal[0],inDir[1]-2*dot*nFinal[1],inDir[2]-2*dot*nFinal[2]]);
+}
+
+// ── Improved ray-sphere intersection ──────────────────────────
+// Check if ray from origin in direction dir passes within radius of point P
+// Returns t (distance along ray) or null
+function rayPointDist(origin, dir, point){
+  const dx=point[0]-origin[0], dy=point[1]-origin[1], dz=point[2]-origin[2];
+  const t=dx*dir[0]+dy*dir[1]+dz*dir[2]; // project onto ray
+  if(t<0.05)return null; // behind origin
+  const px=origin[0]+dir[0]*t, py=origin[1]+dir[1]*t, pz=origin[2]+dir[2]*t;
+  const dist=Math.sqrt((px-point[0])**2+(py-point[1])**2+(pz-point[2])**2);
+  return{t,dist,pos:[px,py,pz]};
+}
+
+// Find where ray hits a room wall
+function rayWallHit(origin,dir,rs,ch){
+  const walls=[
+    {t:(0-origin[0])/dir[0],label:'west'},
+    {t:(rs-origin[0])/dir[0],label:'east'},
+    {t:(0-origin[2])/dir[2],label:'north'},
+    {t:(rs-origin[2])/dir[2],label:'south'},
+    {t:(0-origin[1])/dir[1],label:'floor'},
+    {t:(ch-origin[1])/dir[1],label:'ceiling'},
+  ];
+  let best=null;
+  for(const w of walls){
+    if(!isFinite(w.t)||w.t<0.05)continue;
+    const p=[origin[0]+dir[0]*w.t,origin[1]+dir[1]*w.t,origin[2]+dir[2]*w.t];
+    if(p[0]<-0.05||p[0]>rs+0.05||p[1]<-0.05||p[1]>ch+0.05||p[2]<-0.05||p[2]>rs+0.05)continue;
+    if(!best||w.t<best.t)best={t:w.t,p,label:w.label};
+  }
+  return best;
+}
+
+// Plan SVG coords
+function pSvg(rx,rz,rs){return{sx:P.ox+(rx/rs)*P.px,sy:P.oy+(rz/rs)*P.py};}
+
+// Elevation 1 SVG: looking at west wall (mirror 1 wall)
+// Horizontal: z from 0=north(RIGHT) to rs=south(LEFT) -- FLIPPED
+// Vertical: y=0=floor(bottom), y=ch=ceiling(top)
+function e1Svg(rz,ry,rs,ch){
+  return{sx:E1.ox+(1-rz/rs)*E1.w, sy:E1.oy+(1-ry/ch)*E1.h};
+}
+
+// Elevation 2 SVG: looking at east wall from inside room
+// Horizontal: z from 0=north(LEFT) to rs=south(RIGHT)
+// Vertical: y=0=floor(bottom), y=ch=ceiling(top)
+function e2Svg(rz,ry,rs,ch){
+  return{sx:E2.ox+(rz/rs)*E2.w, sy:E2.oy+(1-ry/ch)*E2.h};
+}
+
+function update(){
+  const rs  =parseFloat(document.getElementById('rs').value)||5;
+  const ch  =parseFloat(document.getElementById('ch').value)||3;
+  const lat =parseFloat(document.getElementById('lat').value)||51.5;
+  const lon =parseFloat(document.getElementById('lon').value)||-0.13;
+  const wl  =parseFloat(document.getElementById('wl').value)||0.5;
+  const wr  =parseFloat(document.getElementById('wr').value)||4.5;
+  const ws  =parseFloat(document.getElementById('ws').value)||0.9;
+  const wt  =parseFloat(document.getElementById('wt').value)||2.4;
+  const wb  =parseFloat(document.getElementById('wb').value)||347;
+  const py  =parseFloat(document.getElementById('py').value)||0.5;
+  const m1z =parseFloat(document.getElementById('m1z').value)||1.5;
+  const m1y =parseFloat(document.getElementById('m1y').value)||1.5;
+  const m1mm=parseFloat(document.getElementById('m1mm').value)||80;
+  const m1p =parseFloat(document.getElementById('m1p').value)||0;
+  const m1t =parseFloat(document.getElementById('m1t').value)||0;
+  const m2x =parseFloat(document.getElementById('m2x').value)||3.5;
+  const m2z =parseFloat(document.getElementById('m2z').value)||2.0;
+  const m2y =parseFloat(document.getElementById('m2y').value)||1.7;
+  const m2mm=parseFloat(document.getElementById('m2mm').value)||80;
+  const m2p =parseFloat(document.getElementById('m2p').value)||0;
+  const m2t =parseFloat(document.getElementById('m2t').value)||0;
+
+  document.getElementById('m1pv').textContent=m1p+'°';
+  document.getElementById('m1tv').textContent=m1t+'°';
+  document.getElementById('m2pv').textContent=m2p+'°';
+  document.getElementById('m2tv').textContent=m2t+'°';
+
+  const date=getDate();
+  const{alt,az}=solarPos(lat,lon,date);
+  const beam=sunBeamDir(az,wb);
+  const active=alt>2&&beam.bz>0.1;
+  const tanAlt=alt>1?Math.tan(alt*Math.PI/180):0.01;
+  const m1m=m1mm/1000, m2m=m2mm/1000;
+  const hitRadius=Math.max(m2m/2, 0.15); // hit radius = mirror radius + small tolerance
+
+  // 3D positions
+  const M1=[0, m1y, m1z];
+  const M2=[m2x, m2y, m2z];
+  const Panel=[(wl+wr)/2, py, 0];
+  const winCX=(wl+wr)/2;
+  const bRatio=beam.bz>0.01?beam.bx/beam.bz:0;
+
+  // Is M1 in sunlit beam?
+  const beamXatM1z=winCX+bRatio*m1z;
+  const beamYtopAtM1=wt-m1z*tanAlt;
+  const beamYsillAtM1=ws-m1z*tanAlt;
+  const m1Lit=active&&beamXatM1z<=0.12&&(m1y+m1m/2)>=beamYsillAtM1&&(m1y-m1m/2)<=beamYtopAtM1&&m1z*tanAlt<wt;
+
+  // Incoming direction to M1 (normalised)
+  const inDir=norm([beam.bx,-tanAlt,beam.bz]);
+
+  // Reflect off M1 -- base normal is +x (east, into room)
+  const outDir1=reflect(inDir,m1p,m1t,[1,0,0]);
+
+  // ── IMPROVED: check ray from M1 passes through M2 ──
+  const m2Check=rayPointDist(M1,outDir1,M2);
+  const m2Hit=m1Lit&&m2Check!==null&&m2Check.dist<hitRadius;
+
+  // Reflect off M2 -- base normal is -x (faces west, toward M1)
+  const outDir2=reflect(outDir1,m2p,m2t,[-1,0,0]);
+
+  // Check ray from M2 hits panel
+  const panelCheck=rayPointDist(M2,outDir2,Panel);
+  const panelHit=m2Hit&&panelCheck!==null&&panelCheck.dist<0.2;
+
+  // Wall hits for drawing rays
+  const wallHit1=rayWallHit(M1,outDir1,rs,ch); // where M1 ray hits wall (through M2)
+  const wallHit2=rayWallHit(M2,outDir2,rs,ch); // where M2 ray hits wall
+
+  // ── PLAN VIEW ─────────────────────────────────────────────
+  const wLs=pSvg(wl,0,rs),wRs=pSvg(wr,0,rs);
+  document.getElementById('p-win').setAttribute('x',wLs.sx);
+  document.getElementById('p-win').setAttribute('width',wRs.sx-wLs.sx);
+
+  const panSvg=pSvg(Panel[0],0,rs);
+  document.getElementById('p-panel').setAttribute('x',panSvg.sx-5);
+  document.getElementById('p-plbl').setAttribute('x',panSvg.sx);
+
+  // Sunlit beam in plan
+  const winCXs=pSvg(winCX,0,rs);
+  const m1Svgp=pSvg(0,m1z,rs);
+  const blTop=pSvg(wl,0,rs),brTop=pSvg(wr,0,rs);
+  const blEnd=pSvg(wl+bRatio*Math.min(m1z,rs),Math.min(m1z,rs),rs);
+  const brEnd=pSvg(wr+bRatio*Math.min(m1z,rs),Math.min(m1z,rs),rs);
+
+  document.getElementById('p-patch').setAttribute('points',
+    `${blTop.sx},${P.oy} ${brTop.sx},${P.oy} ${brEnd.sx},${brEnd.sy} ${blEnd.sx},${blEnd.sy}`);
+  document.getElementById('p-patch').setAttribute('opacity',active?0.07:0.02);
+  document.getElementById('p-bl').setAttribute('x1',blTop.sx); document.getElementById('p-bl').setAttribute('y1',P.oy+3);
+  document.getElementById('p-bl').setAttribute('x2',blEnd.sx); document.getElementById('p-bl').setAttribute('y2',blEnd.sy);
+  document.getElementById('p-bl').setAttribute('opacity',active?0.18:0.04);
+  document.getElementById('p-br').setAttribute('x1',brTop.sx); document.getElementById('p-br').setAttribute('y1',P.oy+3);
+  document.getElementById('p-br').setAttribute('x2',brEnd.sx); document.getElementById('p-br').setAttribute('y2',brEnd.sy);
+  document.getElementById('p-br').setAttribute('opacity',active?0.18:0.04);
+  document.getElementById('p-bc').setAttribute('x1',winCXs.sx); document.getElementById('p-bc').setAttribute('y1',P.oy+3);
+  document.getElementById('p-bc').setAttribute('x2',m1Svgp.sx+5); document.getElementById('p-bc').setAttribute('y2',m1Svgp.sy);
+  document.getElementById('p-bc').setAttribute('opacity',active?0.6:0.1);
+
+  // M1
+  const m1Hpxp=Math.max(5,(m1m/rs)*P.py);
+  document.getElementById('p-m1').setAttribute('y',m1Svgp.sy-m1Hpxp/2);
+  document.getElementById('p-m1').setAttribute('height',m1Hpxp);
+  document.getElementById('p-m1lbl').setAttribute('y',m1Svgp.sy+4);
+  document.getElementById('p-m1').setAttribute('stroke',m1Lit?'#f39c12':'#e67e22');
+
+  // Ray1: beam to M1
+  document.getElementById('p-ray1').setAttribute('x1',winCXs.sx); document.getElementById('p-ray1').setAttribute('y1',P.oy+3);
+  document.getElementById('p-ray1').setAttribute('x2',m1Svgp.sx+5); document.getElementById('p-ray1').setAttribute('y2',m1Svgp.sy);
+  document.getElementById('p-ray1').setAttribute('opacity',active?0.8:0.15);
+
+  // Ray2: M1 → M2 (draw to wall hit, with M2 circle along path)
+  const m2Svgp=pSvg(m2x,m2z,rs);
+  const r1end=wallHit1?pSvg(wallHit1.p[0],wallHit1.p[2],rs):m2Svgp;
+  document.getElementById('p-ray2').setAttribute('x1',m1Svgp.sx+5); document.getElementById('p-ray2').setAttribute('y1',m1Svgp.sy);
+  document.getElementById('p-ray2').setAttribute('x2',r1end.sx); document.getElementById('p-ray2').setAttribute('y2',r1end.sy);
+  document.getElementById('p-ray2').setAttribute('opacity',m1Lit?0.8:0.15);
+  // Arrow near M2
+  document.getElementById('p-arr2').setAttribute('points',
+    `${m2Svgp.sx-7},${m2Svgp.sy-4} ${m2Svgp.sx+3},${m2Svgp.sy} ${m2Svgp.sx-7},${m2Svgp.sy+4}`);
+  document.getElementById('p-arr2').setAttribute('opacity',m1Lit?0.8:0.1);
+
+  // M2
+  document.getElementById('p-m2').setAttribute('cx',m2Svgp.sx); document.getElementById('p-m2').setAttribute('cy',m2Svgp.sy);
+  document.getElementById('p-m2lbl').setAttribute('x',m2Svgp.sx); document.getElementById('p-m2lbl').setAttribute('y',m2Svgp.sy+4);
+  document.getElementById('p-m2').setAttribute('stroke',m2Hit?'#f1c40f':'#9b59b6');
+  document.getElementById('p-m2').setAttribute('stroke-width',m2Hit?'2.5':'2');
+  // M2 facing arrow (pan)
+  const m2FR=(m2p+180)*Math.PI/180;
+  document.getElementById('p-m2arr').setAttribute('x2',m2Svgp.sx+Math.sin(m2FR)*16);
+  document.getElementById('p-m2arr').setAttribute('y2',m2Svgp.sy-Math.cos(m2FR)*16);
+  document.getElementById('p-m2arr').setAttribute('x1',m2Svgp.sx); document.getElementById('p-m2arr').setAttribute('y1',m2Svgp.sy);
+
+  // Ray3: M2 → panel (always draw)
+  const r2end=wallHit2?pSvg(wallHit2.p[0],wallHit2.p[2],rs):panSvg;
+  document.getElementById('p-ray3').setAttribute('x1',m2Svgp.sx); document.getElementById('p-ray3').setAttribute('y1',m2Svgp.sy);
+  document.getElementById('p-ray3').setAttribute('x2',r2end.sx); document.getElementById('p-ray3').setAttribute('y2',r2end.sy);
+  document.getElementById('p-ray3').setAttribute('opacity',m2Hit?0.8:0.3); // always show faintly
+
+  const panelHitSvg=wallHit2?pSvg(wallHit2.p[0],wallHit2.p[2],rs):panSvg;
+  document.getElementById('p-arr3').setAttribute('points',
+    `${panelHitSvg.sx-4},${panelHitSvg.sy-7} ${panelHitSvg.sx},${panelHitSvg.sy+3} ${panelHitSvg.sx+4},${panelHitSvg.sy-7}`);
+  document.getElementById('p-arr3').setAttribute('opacity',m2Hit?0.8:0.3);
+
+  // Chain number labels
+  document.getElementById('p-s1').setAttribute('x',(winCXs.sx+m1Svgp.sx)/2-10); document.getElementById('p-s1').setAttribute('y',(P.oy+m1Svgp.sy)/2);
+  document.getElementById('p-s2').setAttribute('x',(m1Svgp.sx+m2Svgp.sx)/2+5); document.getElementById('p-s2').setAttribute('y',(m1Svgp.sy+m2Svgp.sy)/2-5);
+  document.getElementById('p-s3').setAttribute('x',(m2Svgp.sx+r2end.sx)/2+5); document.getElementById('p-s3').setAttribute('y',(m2Svgp.sy+r2end.sy)/2);
+
+  // Sun dot compass
+  const azR=az*Math.PI/180;
+  document.getElementById('p-sundot').setAttribute('cx',Math.sin(azR)*11); document.getElementById('p-sundot').setAttribute('cy',-Math.cos(azR)*11);
+  document.getElementById('p-sundot').setAttribute('fill',alt>0?'#f39c12':'#555');
+
+  // ── ELEVATION 1 (west/mirror1 wall) ────────────────────────
+  const eop=active?0.8:0.15;
+  document.getElementById('e1-cl').textContent=ch.toFixed(1)+'m';
+
+  // Beam patch
+  const tanA=alt>1?Math.tan(alt*Math.PI/180):0.01;
+  const zTF=wt/tanA,zSF=ws/tanA;
+  const zTR=Math.min(zTF,rs),yTR=Math.max(0,wt-zTR*tanA);
+  const zBR=Math.min(zSF,rs),yBR=Math.max(0,ws-zBR*tanA);
+  const e1TL=e1Svg(0,wt,rs,ch),e1TR=e1Svg(zTR,yTR,rs,ch);
+  const e1BR=e1Svg(zBR,yBR,rs,ch),e1BL=e1Svg(0,ws,rs,ch);
+  document.getElementById('e1-patch').setAttribute('points',
+    `${e1TL.sx},${e1TL.sy} ${e1TR.sx},${e1TR.sy} ${e1BR.sx},${e1BR.sy} ${e1BL.sx},${e1BL.sy}`);
+  document.getElementById('e1-patch').setAttribute('opacity',active?0.09:0.02);
+  const zC=Math.min((zTF+zSF)/2,rs),yC=Math.max(0,(wt+ws)/2-zC*tanA);
+  const e1CS=e1Svg(0,(wt+ws)/2,rs,ch),e1CE=e1Svg(zC,yC,rs,ch);
+  document.getElementById('e1-btop').setAttribute('x1',e1TL.sx); document.getElementById('e1-btop').setAttribute('y1',e1TL.sy);
+  document.getElementById('e1-btop').setAttribute('x2',e1TR.sx); document.getElementById('e1-btop').setAttribute('y2',e1TR.sy);
+  document.getElementById('e1-btop').setAttribute('opacity',active?0.28:0.05);
+  document.getElementById('e1-bbot').setAttribute('x1',e1BL.sx); document.getElementById('e1-bbot').setAttribute('y1',e1BL.sy);
+  document.getElementById('e1-bbot').setAttribute('x2',e1BR.sx); document.getElementById('e1-bbot').setAttribute('y2',e1BR.sy);
+  document.getElementById('e1-bbot').setAttribute('opacity',active?0.28:0.05);
+  document.getElementById('e1-bcen').setAttribute('x1',e1CS.sx); document.getElementById('e1-bcen').setAttribute('y1',e1CS.sy);
+  document.getElementById('e1-bcen').setAttribute('x2',e1CE.sx); document.getElementById('e1-bcen').setAttribute('y2',e1CE.sy);
+  document.getElementById('e1-bcen').setAttribute('opacity',eop);
+
+  // M1 on elevation 1
+  const eM1=e1Svg(m1z,m1y,rs,ch);
+  const m1Hpx=Math.max(8,(m1m/ch)*E1.h),m1Wpx=Math.max(5,(m1m/rs)*E1.w);
+  document.getElementById('e1-m1').setAttribute('x',eM1.sx-m1Wpx/2);
+  document.getElementById('e1-m1').setAttribute('y',eM1.sy-m1Hpx/2);
+  document.getElementById('e1-m1').setAttribute('width',m1Wpx);
+  document.getElementById('e1-m1').setAttribute('height',m1Hpx);
+  document.getElementById('e1-m1l').setAttribute('x',eM1.sx);
+  document.getElementById('e1-m1l').setAttribute('y',eM1.sy+4);
+  document.getElementById('e1-m1').setAttribute('stroke',m1Lit?'#f39c12':'#e67e22');
+  document.getElementById('e1-m1').setAttribute('stroke-width',m1Lit?'3':'2');
+  document.getElementById('e1-m1g').setAttribute('x',eM1.sx-m1Wpx/2-2);
+  document.getElementById('e1-m1g').setAttribute('y',eM1.sy-m1Hpx/2-2);
+  document.getElementById('e1-m1g').setAttribute('width',m1Wpx+4);
+  document.getElementById('e1-m1g').setAttribute('height',m1Hpx+4);
+  document.getElementById('e1-m1g').setAttribute('opacity',m1Lit?0.7:0);
+
+  // Window dim on E1
+  const e1WinTop=e1Svg(0,wt,rs,ch),e1WinSill=e1Svg(0,ws,rs,ch);
+  document.getElementById('e1-wd').setAttribute('y1',e1WinTop.sy); document.getElementById('e1-wd').setAttribute('y2',e1WinSill.sy);
+  document.getElementById('e1-wdt').setAttribute('y1',e1WinTop.sy); document.getElementById('e1-wdt').setAttribute('y2',e1WinTop.sy);
+  document.getElementById('e1-wdb').setAttribute('y1',e1WinSill.sy); document.getElementById('e1-wdb').setAttribute('y2',e1WinSill.sy);
+  document.getElementById('e1-wdl').setAttribute('y',(e1WinTop.sy+e1WinSill.sy)/2+3);
+  document.getElementById('e1-wdl').textContent=(wt-ws).toFixed(1)+'m';
+
+  // Reflected ray from M1 in elevation 1 (show tilt component)
+  // outDir1 = [x,y,z]. In E1 view: z axis = horizontal(flipped), y = vertical
+  // Ray goes in +x direction (into room) = goes off screen to the right (not shown in this view)
+  // Show the departure angle (tilt) as a line from M1
+  const tiltR1=Math.atan2(outDir1[1],Math.sqrt(outDir1[0]**2+outDir1[2]**2));
+  const e1RayEndX=eM1.sx-50; // goes into room (leftward in this flipped view)
+  const e1RayEndY=eM1.sy-Math.tan(tiltR1)*50;
+  document.getElementById('e1-ray2').setAttribute('x1',eM1.sx); document.getElementById('e1-ray2').setAttribute('y1',eM1.sy);
+  document.getElementById('e1-ray2').setAttribute('x2',e1RayEndX); document.getElementById('e1-ray2').setAttribute('y2',e1RayEndY);
+  document.getElementById('e1-ray2').setAttribute('opacity',m1Lit?0.7:0.15);
+  document.getElementById('e1-arr2').setAttribute('points',
+    `${e1RayEndX+5},${e1RayEndY-4} ${e1RayEndX-3},${e1RayEndY} ${e1RayEndX+5},${e1RayEndY+4}`);
+  document.getElementById('e1-arr2').setAttribute('opacity',m1Lit?0.7:0.1);
+  document.getElementById('e1-r2l').setAttribute('x',(eM1.sx+e1RayEndX)/2);
+  document.getElementById('e1-r2l').setAttribute('y',Math.min(eM1.sy,e1RayEndY)-4);
+  document.getElementById('e1-r2l').setAttribute('opacity',m1Lit?1:0.3);
+
+  // Panel on E1 (right edge = window wall)
+  const e1Panel=e1Svg(0,py,rs,ch);
+  document.getElementById('e1-panel').setAttribute('y',e1Panel.sy-7);
+  document.getElementById('e1-panel').setAttribute('stroke',panelHit?'#f1c40f':'#1e8449');
+
+  // Window strip on E1
+  const e1WinS=e1Svg(0,ws,rs,ch),e1WinT=e1Svg(0,wt,rs,ch);
+  document.getElementById('e1-wins').setAttribute('y',e1WinT.sy);
+  document.getElementById('e1-wins').setAttribute('height',e1WinS.sy-e1WinT.sy);
+
+  document.getElementById('e1-al').textContent=`alt: ${alt.toFixed(1)}°`;
+  document.getElementById('e1-al').setAttribute('fill',active?'#f39c12':'#666');
+
+  // ── ELEVATION 2 (looking at east wall) ─────────────────────
+  // Horizontal: z (north=left=0, south=right=rs)
+  // Vertical: y
+  // M2 is freestanding at (m2x, m2y, m2z)
+  // In this view we see M2 in front of the east wall
+  // Beam from M1 arrives traveling in direction outDir1 = [x,y,z]
+  // We show the beam arriving from the left (north side)
+
+  document.getElementById('e2-cl').textContent=ch.toFixed(1)+'m';
+
+  const eM2=e2Svg(m2z,m2y,rs,ch);
+  const m2Hpx=Math.max(8,(m2m/ch)*E2.h),m2Wpx=Math.max(5,(m2m/rs)*E2.w);
+  document.getElementById('e2-m2').setAttribute('cx',eM2.sx); document.getElementById('e2-m2').setAttribute('cy',eM2.sy);
+  document.getElementById('e2-m2l').setAttribute('x',eM2.sx); document.getElementById('e2-m2l').setAttribute('y',eM2.sy+4);
+  document.getElementById('e2-m2').setAttribute('stroke',m2Hit?'#f1c40f':'#9b59b6');
+  document.getElementById('e2-m2').setAttribute('stroke-width',m2Hit?'3':'2');
+  document.getElementById('e2-m2g').setAttribute('x',eM2.sx-m2Wpx/2-2);
+  document.getElementById('e2-m2g').setAttribute('y',eM2.sy-m2Hpx/2-2);
+  document.getElementById('e2-m2g').setAttribute('width',m2Wpx+4);
+  document.getElementById('e2-m2g').setAttribute('height',m2Hpx+4);
+  document.getElementById('e2-m2g').setAttribute('opacity',m2Hit?0.8:0);
+
+  // Incoming ray from M1 to M2 in E2 view
+  // outDir1 travels in direction [x,y,z]. In E2 view: z=horiz, y=vert
+  // Ray arrives AT m2z position horizontally, at m2y height
+  // Show it coming from left at the correct height
+  // The ray's height changes as it travels: at M1 height=m1y, at M2 height=m2y
+  // We show it arriving from z=0 side (north) at some height
+  // Height at z=0 (if ray extended back): m2y - outDir1[1]/outDir1[2]*m2z (if outDir1[2]!=0)
+  let rayInStartY=m2y;
+  if(Math.abs(outDir1[2])>0.01) rayInStartY=m2y-(outDir1[1]/outDir1[2])*m2z;
+  rayInStartY=Math.max(0,Math.min(ch,rayInStartY));
+  const e2RayInStart=e2Svg(0,rayInStartY,rs,ch);
+  document.getElementById('e2-ray2in').setAttribute('x1',e2RayInStart.sx);
+  document.getElementById('e2-ray2in').setAttribute('y1',e2RayInStart.sy);
+  document.getElementById('e2-ray2in').setAttribute('x2',eM2.sx-9);
+  document.getElementById('e2-ray2in').setAttribute('y2',eM2.sy);
+  document.getElementById('e2-ray2in').setAttribute('opacity',m1Lit?0.8:0.2);
+  document.getElementById('e2-arr2in').setAttribute('points',
+    `${eM2.sx-16},${eM2.sy-4} ${eM2.sx-6},${eM2.sy} ${eM2.sx-16},${eM2.sy+4}`);
+  document.getElementById('e2-arr2in').setAttribute('opacity',m1Lit?0.8:0.2);
+  document.getElementById('e2-r2inl').setAttribute('x',(e2RayInStart.sx+eM2.sx)/2);
+  document.getElementById('e2-r2inl').setAttribute('y',Math.min(e2RayInStart.sy,eM2.sy)-4);
+
+  // Outgoing ray from M2 in E2 view
+  // outDir2 = [x,y,z]. Show z and y components
+  // Ray travels from M2 toward panel (north wall, z=0)
+  // Height at z=0: m2y - outDir2[1]/outDir2[2]*m2z (if outDir2[2]<0 = toward north)
+  let rayOutEndY=py;
+  if(Math.abs(outDir2[2])>0.01&&outDir2[2]<0){
+    rayOutEndY=m2y+(outDir2[1]/Math.abs(outDir2[2]))*m2z;
+    rayOutEndY=Math.max(0,Math.min(ch,rayOutEndY));
+  }
+  const e2PanelPos=e2Svg(0,rayOutEndY,rs,ch);
+  document.getElementById('e2-ray3').setAttribute('x1',eM2.sx);
+  document.getElementById('e2-ray3').setAttribute('y1',eM2.sy);
+  document.getElementById('e2-ray3').setAttribute('x2',e2PanelPos.sx+6);
+  document.getElementById('e2-ray3').setAttribute('y2',e2PanelPos.sy);
+  document.getElementById('e2-ray3').setAttribute('opacity',m2Hit?0.8:0.3); // always show
+
+  document.getElementById('e2-arr3').setAttribute('points',
+    `${e2PanelPos.sx+4},${e2PanelPos.sy-7} ${e2PanelPos.sx},${e2PanelPos.sy+3} ${e2PanelPos.sx+8},${e2PanelPos.sy+1}`);
+  document.getElementById('e2-arr3').setAttribute('opacity',m2Hit?0.8:0.3);
+  document.getElementById('e2-r3l').setAttribute('x',(eM2.sx+e2PanelPos.sx)/2+10);
+  document.getElementById('e2-r3l').setAttribute('y',(eM2.sy+e2PanelPos.sy)/2-4);
+
+  // Panel on E2 (left edge = window/north wall)
+  const e2PanSvg=e2Svg(0,py,rs,ch);
+  document.getElementById('e2-panel').setAttribute('y',e2PanSvg.sy-7);
+  document.getElementById('e2-panel').setAttribute('stroke',panelHit?'#f1c40f':'#1e8449');
+  document.getElementById('e2-panel').setAttribute('stroke-width',panelHit?'3':'1.5');
+
+  // M2 height indicator
+  const e2Floor=e2Svg(m2z,0,rs,ch);
+  document.getElementById('e2-m2h').setAttribute('x1',eM2.sx+12); document.getElementById('e2-m2h').setAttribute('x2',eM2.sx+12);
+  document.getElementById('e2-m2h').setAttribute('y1',eM2.sy); document.getElementById('e2-m2h').setAttribute('y2',e2Floor.sy);
+  document.getElementById('e2-m2hl').setAttribute('x',eM2.sx+22);
+  document.getElementById('e2-m2hl').setAttribute('y',(eM2.sy+e2Floor.sy)/2+3);
+  document.getElementById('e2-m2hl').textContent=m2y.toFixed(1)+'m';
+
+  // ── STATS ────────────────────────────────────────────────────
+  const ts=getDate().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  const ds=getDate().toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  const m2DistErr=m2Check?m2Check.dist.toFixed(2):'--';
+  const c1=active?'<span class="v">✓</span>':'<span class="vw">✗</span>';
+  const c2=m1Lit?'<span class="v">✓</span>':'<span class="vw">✗</span>';
+  const c3=m2Hit?'<span class="v">✓</span>':'<span class="vm">⚠</span>';
+  const c4=panelHit?'<span class="v">✓</span>':'<span class="vm">⚠</span>';
+  const m2Status=m2Check?`Ray passes ${m2DistErr}m from M2 (need <${hitRadius.toFixed(2)}m)`:'Ray going wrong direction';
+  const m2OutWall=wallHit2?wallHit2.label:'--';
+
+  document.getElementById('stats').innerHTML=`
+    <div>📅 <b>${ds}</b> at <b>${ts}</b></div>
+    <div>Sun alt: <span class="v">${alt.toFixed(1)}°</span>  az: <span class="v">${az.toFixed(1)}°</span></div>
+    <div style="margin-top:4px;border-top:1px solid #333;padding-top:4px">
+    <div>${c1} Sun active through window</div>
+    <div>${c2} Beam hitting Mirror 1</div>
+    <div>${c3} M1 ray reaches Mirror 2</div>
+    <div>${c4} M2 ray reaches solar panel</div>
+    </div>
+    <div style="margin-top:4px;font-size:9px;color:#aaa">
+      ${m2Status}<br/>
+      M2 output hits: ${m2OutWall} wall<br/>
+      <span style="color:#f39c12">Elev B shows M2 + beam from above east</span>
+    </div>
+  `;
+}
+
+update();
+</script>
+</body>
+</html>
