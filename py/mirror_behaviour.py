@@ -28,18 +28,25 @@ PAN_ID       = 1
 TILT_ID      = 2
 
 # ── Position limits ────────────────────────────────────────
-PAN_CENTRE   = 1140
-TILT_CENTRE  = 850
-PAN_RANGE    = 200
-TILT_RANGE   = 100
+PAN_CENTRE   = 1295
+TILT_CENTRE  = 825
+
+# Explore mode — small circles around a locked centre
+EXPLORE_PAN_RANGE    = 25
+EXPLORE_TILT_RANGE   = 25
+
+# Seek mode — wider spiral search
+SEEK_PAN_RADIUS      = 25   # counts per ring (existing default)
+SEEK_TILT_RADIUS     = 15   # counts per ring (existing default)
+SEEK_MAX_RINGS       = 5
 
 # ── Motion profile ──────────────────────────────────────────
 SEEK_VELOCITY    = 15    # slow, smooth steps in seek mode (0 = instant)
-EXPLORE_VELOCITY = 0     # let explore mode's sine-wave commands drive motion
+EXPLORE_VELOCITY = 4     # let explore mode's sine-wave commands drive motion
 
 # ── Light level configuration ──────────────────────────────
-SEEK_THRESHOLD    = 0.3
-EXPLORE_THRESHOLD = 0.2
+SEEK_THRESHOLD    = 0.30
+EXPLORE_THRESHOLD = 0.15
 
 # Voltage-to-light-level mapping (based on divider output at A0)
 # 0.0V at A0 = darkness, 3.0V at A0 = full panel output (~12V before divider)
@@ -61,6 +68,7 @@ if not args.simulate:
 
         i2c = busio.I2C(board.SCL, board.SDA)
         ads = ADS1115(i2c)
+        ads.data_rate = 8    # slowest rate = internal averaging smooths PWM
         ads_channel = AnalogIn(ads, 0)
         print("ADS1115 initialised on A0")
     except Exception as e:
@@ -79,6 +87,16 @@ portHandler.setBaudRate(BAUDRATE)
 print("Connected to servos\n")
 
 # ── Helper functions ───────────────────────────────────────
+ADDR_POS_P_GAIN = 84
+ADDR_POS_I_GAIN = 82
+ADDR_POS_D_GAIN = 80
+
+def set_pid_gains(sid, p=800, i=0, d=0):
+    """Set position PID gains. Higher P = more responsive to small errors."""
+    packetHandler.write2ByteTxRx(portHandler, sid, ADDR_POS_P_GAIN, p)
+    packetHandler.write2ByteTxRx(portHandler, sid, ADDR_POS_I_GAIN, i)
+    packetHandler.write2ByteTxRx(portHandler, sid, ADDR_POS_D_GAIN, d)
+
 def set_velocity(sid, velocity):
     """Set profile velocity. Lower = slower/smoother, 0 = max speed."""
     packetHandler.write4ByteTxRx(portHandler, sid, ADDR_PROFILE_VEL, velocity)
@@ -99,8 +117,8 @@ def get_spiral_position(step, pan_centre, tilt_centre):
     ring  = step // steps_per_ring
     angle = (step % steps_per_ring) * (2 * math.pi / steps_per_ring)
 
-    radius_pan  = ring * 25
-    radius_tilt = ring * 15
+    radius_pan  = ring * SEEK_PAN_RADIUS
+    radius_tilt = ring * SEEK_TILT_RADIUS
 
     pan  = pan_centre  + int(radius_pan  * math.sin(angle))
     tilt = tilt_centre + int(radius_tilt * math.cos(angle))
@@ -159,6 +177,8 @@ def check_keypress():
 # ── Enable torque ──────────────────────────────────────────
 enable_torque(PAN_ID)
 enable_torque(TILT_ID)
+set_pid_gains(PAN_ID,  p=1500, i=0, d=500)
+set_pid_gains(TILT_ID, p=1500, i=0, d=500)
 set_velocity(PAN_ID,  SEEK_VELOCITY)  
 set_velocity(TILT_ID, SEEK_VELOCITY)
 move_to(PAN_ID,  PAN_CENTRE)
@@ -204,47 +224,49 @@ try:
             time.sleep(0.6)
             seek_step += 1
 
-            # Reset after 5 rings
-            if seek_step > 16 * 5:
+            # Reset after N rings
+            if seek_step > 16 * SEEK_MAX_RINGS:
                 seek_step = 0
 
             if light_level >= SEEK_THRESHOLD:
                 print(f"\n** LOCKED at light={light_level:.2f} **")
-                set_velocity(PAN_ID,  EXPLORE_VELOCITY)  
+                set_velocity(PAN_ID,  EXPLORE_VELOCITY)
                 set_velocity(TILT_ID, EXPLORE_VELOCITY)
                 mode = 'explore'
                 t    = 0
 
-# ── Explore mode ───────────────────────────────────
+        # ── Explore mode ───────────────────────────────────
         elif mode == 'explore':
-            # Circular/oval motion with constant angular velocity
-            # — no slowdowns at the extremes like a sine wave has.
-            # Amplitude scales gently with light (0.6 to 1.0 of full range).
-            amp_scale = 0.6 + 0.4 * light_level
-            pan_amp   = PAN_RANGE  * amp_scale
-            tilt_amp  = TILT_RANGE * amp_scale
+            # Use the servo's own velocity profile to create smooth motion
+            # between waypoints. We command a new waypoint every ~1 second
+            # and let the servo glide there using its internal controller.
 
-            # Slow rotation — one full circle every 30–60 seconds
-            # depending on light level
-            angular_speed = 0.02 + light_level * 0.04
+            amp_scale = 0.1 + 0.9 * light_level
+            pan_amp   = EXPLORE_PAN_RANGE  * amp_scale
+            tilt_amp  = EXPLORE_TILT_RANGE * amp_scale
 
-            # Slow drift that offsets the circle centre over time,
-            # so the pattern is an evolving meander rather than a
-            # fixed loop. Drift period ~8x slower than the main circle.
+            # Slow circle — one full loop every ~60 seconds
+            angular_speed = 0.10 + light_level * 0.05
+
+            # Ramp-in to prevent jump at entry
+            RAMP_DURATION = 3.0
+            ramp = min(1.0, t / RAMP_DURATION)
+            ramp = ramp * ramp * (3 - 2 * ramp)  # smoothstep
+
             drift_speed = angular_speed * 0.13
-            drift_pan   = pan_amp  * 0.3 * math.sin(drift_speed * t)
-            drift_tilt  = tilt_amp * 0.3 * math.cos(drift_speed * t * 0.618)
+            drift_pan   = pan_amp  * 0.3 * math.sin(drift_speed * t) * ramp
+            drift_tilt  = tilt_amp * 0.3 * math.cos(drift_speed * t * 0.618) * ramp
 
-            pan  = PAN_CENTRE  + drift_pan  + pan_amp  * 0.7 * math.cos(angular_speed * t)
-            tilt = TILT_CENTRE + drift_tilt + tilt_amp * 0.7 * math.sin(angular_speed * t)
+            pan  = PAN_CENTRE  + drift_pan  + pan_amp  * 0.7 * math.cos(angular_speed * t) * ramp
+            tilt = TILT_CENTRE + drift_tilt + tilt_amp * 0.7 * math.sin(angular_speed * t) * ramp
 
             move_to(PAN_ID,  pan)
             move_to(TILT_ID, tilt)
-            print(f"\rEXPLORING  light={light_level:.2f}  "
+            print(f"\rEXPLORING  light={light_level:.2f}  ramp={ramp:.2f}  "
                   f"pan={int(pan)}  tilt={int(tilt)}    ", end='')
 
-            t += 0.1
-            time.sleep(0.05)
+            t += 1.0           # big time step — waypoint every second
+            time.sleep(1.0)    # wait for servo to glide there
 
             if light_level < EXPLORE_THRESHOLD:
                 print(f"\n** LOST LOCK at light={light_level:.2f} **")
