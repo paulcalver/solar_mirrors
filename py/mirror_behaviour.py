@@ -27,7 +27,7 @@ PAN_ID       = 1
 TILT_ID      = 2
 
 # ── Position limits ────────────────────────────────────────
-PAN_CENTRE   = 1300
+PAN_CENTRE   = 1140
 TILT_CENTRE  = 850
 PAN_RANGE    = 200
 TILT_RANGE   = 100
