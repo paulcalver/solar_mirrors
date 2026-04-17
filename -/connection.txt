@@ -1,9 +1,9 @@
 ssh paulcalver@solarmirror.local
 
 python3 test_adc.py
+python3 ~/find_centre.py
 
 scp mirror_behaviour.py paulcalver@solarmirror.local:~/
-
-python3 ~/find_centre.py
+scp find_centre.py paulcalver@solarmirror.local:~/
 
 python3 ~/mirror_behaviour.py
