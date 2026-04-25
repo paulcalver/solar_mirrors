@@ -13,6 +13,8 @@ A mirror redirects sunlight onto the solar panel that powers it. When it finds a
 
 A solar panel belongs outside, in the sun. This one is indoors, by design. The system has chosen the hard way, on purpose, for its own reasons.
 
+Video: https://vimeo.com/1185954696
+
 ## Technical notes
 
 Raspberry Pi, Dynamixel XL-330 servos, ADS1115 voltage reader, 5W indoor solar panel. Python control loop: if voltage is low, search; if voltage is high, hold. The system is light-seeking, not astronomically calculated.
