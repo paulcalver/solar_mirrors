@@ -32,12 +32,12 @@ PAN_ID       = 1
 TILT_ID      = 2
 
 # ── Position limits ────────────────────────────────────────
-PAN_CENTRE   = 1273
-TILT_CENTRE  = 825
+PAN_CENTRE   = 1224
+TILT_CENTRE  = 784
 
 # Seek mode — wide random sweeps
-SEEK_PAN_RANGE       = 140
-SEEK_TILT_RANGE      = 90
+SEEK_PAN_RANGE       = 100
+SEEK_TILT_RANGE      = 70
 
 # Explore mode — small wandering within lock zone
 EXPLORE_PAN_RANGE    = 10
@@ -62,8 +62,8 @@ UPDATE_RATE_HZ       = 50
 UPDATE_PERIOD        = 1.0 / UPDATE_RATE_HZ
 
 # ── Light level configuration ──────────────────────────────
-SEEK_THRESHOLD    = 0.65
-EXPLORE_THRESHOLD = 0.40
+SEEK_THRESHOLD    = 0.80
+EXPLORE_THRESHOLD = 0.30
 
 VOLTAGE_MIN       = 0.1
 VOLTAGE_MAX       = 2.8
