@@ -1,6 +1,6 @@
 # Mediating Solar Time
 
-> What would a world look like if we allowed our environment to control our machines?
+What would a world look like if we allowed our environment to control our machines?
 
 A solar-tracking mirror installation by Paul Calver.
 
